@@ -20,9 +20,13 @@
 #   and set_file do just what one would expect.  Tab completion helps.
 #
 
-DPXMLSH_VERSION=0.62
+DPXMLSH_VERSION=0.63
 
 # Changes
+# 0.63 2016-01-04:
+#  * Add missing domain on set-file and get-file
+#  * Add createdir and removedir
+#  * selftest works on non-default domains
 # 0.62 2014-12-08:
 #  * Fix dpxmlsh_help so init args are displayed.
 # 0.61 2014-09-24:
@@ -530,7 +534,7 @@ function dpxmlsh_soma_set_file ()
 	<?xml version="1.0" encoding="UTF-8"?>
 	<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
 	  <soapenv:Body>
-	    <dp:request xmlns:dp="http://www.datapower.com/schemas/management">
+	    <dp:request xmlns:dp="http://www.datapower.com/schemas/management" domain="$_DPXMLSH_DPDOMAIN">
 	      <dp:set-file name="$DPFILENAME">
 	EOF
     # cat is happy to take "-" as well, and cleverly we are happy to take
@@ -584,7 +588,7 @@ function dpxmlsh_soma_get_file ()
 	<?xml version="1.0" encoding="UTF-8"?>
 	<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
 	 <soapenv:Body>
-	  <dp:request xmlns:dp="http://www.datapower.com/schemas/management">
+	  <dp:request xmlns:dp="http://www.datapower.com/schemas/management" domain="$_DPXMLSH_DPDOMAIN">
 	   <dp:get-file name="$DPFILENAME"/>
 	  </dp:request>
 	 </soapenv:Body>
@@ -711,6 +715,57 @@ function dpxmlsh_soma_action_deletefile ()
   _dpxmlsh_pipestatus $FUNCNAME ${PIPESTATUS[@]}
 }
 
+function dpxmlsh_action_removedir () { _dpxmlsh_shell2xml 1 1 "$FUNCNAME" "$@"; }
+function dpxmlsh_soma_action_removedir ()
+{
+  local DPDIRNAME="$1"
+  { cat <<-EOF
+	<?xml version="1.0" encoding="UTF-8"?>
+	<env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/">
+	  <env:Body>
+	    <dp:request xmlns:dp="http://www.datapower.com/schemas/management" domain="$_DPXMLSH_DPDOMAIN">
+	      <dp:do-action>
+	        <RemoveDir>
+	          <Dir>$DPDIRNAME</Dir>
+	        </RemoveDir>
+	      </dp:do-action>
+	    </dp:request>
+	  </env:Body>
+	</env:Envelope>
+	EOF
+  } | _dpxmlsh_tee $FUNCNAME request xml \
+    | $_DPXMLSH_CURLSOMACMD \
+    | _dpxmlsh_tee $FUNCNAME response xml \
+    | $_DPXMLSH_XMLSTARLET fo
+
+  _dpxmlsh_pipestatus $FUNCNAME ${PIPESTATUS[@]}
+}
+
+function dpxmlsh_action_createdir () { _dpxmlsh_shell2xml 1 1 "$FUNCNAME" "$@"; }
+function dpxmlsh_soma_action_createdir ()
+{
+  local DPDIRNAME="$1"
+  { cat <<-EOF
+	<?xml version="1.0" encoding="UTF-8"?>
+	<env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/">
+	  <env:Body>
+	    <dp:request xmlns:dp="http://www.datapower.com/schemas/management" domain="$_DPXMLSH_DPDOMAIN">
+	      <dp:do-action>
+	        <CreateDir>
+	          <Dir>$DPDIRNAME</Dir>
+	        </CreateDir>
+	      </dp:do-action>
+	    </dp:request>
+	  </env:Body>
+	</env:Envelope>
+	EOF
+  } | _dpxmlsh_tee $FUNCNAME request xml \
+    | $_DPXMLSH_CURLSOMACMD \
+    | _dpxmlsh_tee $FUNCNAME response xml \
+    | $_DPXMLSH_XMLSTARLET fo
+
+  _dpxmlsh_pipestatus $FUNCNAME ${PIPESTATUS[@]}
+}
 # get a list of all files on the appliance
 function dpxmlsh_soma_get_filestore ()
 {
@@ -1554,30 +1609,30 @@ function dpxmlsh_selftest ()
   local payload="$USER $(hostname) $(date)"
 
   echo -e "\n#### dpxmlsh_set_file"
-  echo '$ echo "$payload" | dpxmlsh_set_file - "store:dpxmlsh.tmp"'
+  echo '$ echo "$payload" | dpxmlsh_set_file - "local:dpxmlsh.tmp"'
   echo "$payload" \
-    | dpxmlsh_set_file - "store:dpxmlsh.tmp" \
+    | dpxmlsh_set_file - "local:dpxmlsh.tmp" \
     || { echo "dpxmlsh_set_file failed $?" >&2 ; return 1 ; }
 
   echo -e "\n#### dpxmlsh_get_file"
-  echo '$ dpxmlsh_get_file "store:dpxmlsh.tmp" -'
-  dpxmlsh_get_file "store:dpxmlsh.tmp" - > /dev/null \
+  echo '$ dpxmlsh_get_file "local:dpxmlsh.tmp" -'
+  dpxmlsh_get_file "local:dpxmlsh.tmp" - > /dev/null \
     || { echo "dpxmlsh_get_file failed $?" >&2 ; return 1 ; }
 
   echo -e "\n#### dpxmlsh_get_file check payload"
-  echo '$ RESULT=$(dpxmlsh_get_file "store:dpxmlsh.tmp" -)'
-  local RESULT=$(dpxmlsh_get_file "store:dpxmlsh.tmp" -)
+  echo '$ RESULT=$(dpxmlsh_get_file "local:dpxmlsh.tmp" -)'
+  local RESULT=$(dpxmlsh_get_file "local:dpxmlsh.tmp" -)
   [ "$payload" = "$RESULT" ] \
     || { echo "dpxmlsh_get_file contents failed $?" >&2 ; return 1 ; }
 
   echo -e "\n#### dpxmlsh_deletefile"
-  echo '$ dpxmlsh_deletefile "store:dpxmlsh.tmp"'
-  dpxmlsh_deletefile "store:dpxmlsh.tmp" \
+  echo '$ dpxmlsh_deletefile "local:dpxmlsh.tmp"'
+  dpxmlsh_deletefile "local:dpxmlsh.tmp" \
     || { echo "dpxmlsh_deletefile should have succeeded but failed $?" >&2 ; return 1 ; }
 
   echo -e "\n#### dpxmlsh_deletefile negative test, soma error expected"
-  echo '$ dpxmlsh_deletefile "store:dpxmlsh.tmp"'
-  dpxmlsh_deletefile "store:dpxmlsh.tmp" \
+  echo '$ dpxmlsh_deletefile "local:dpxmlsh.tmp"'
+  dpxmlsh_deletefile "local:dpxmlsh.tmp" \
     && { echo "dpxmlsh_deletefile should have failed but succeeded $?" >&2 ; return 1 ; }
 
 ##
@@ -1748,6 +1803,19 @@ function dpxmlsh_selftest ()
   echo '$ dpxmlsh_action_testhardware'
   dpxmlsh_action_testhardware \
     || { echo "dpxmlsh_action_testhardware failed $?" >&2 ; return 1 ; }
+  echo -e "\n#### dpxmlsh_action_createdir"
+  echo '$ dpxmlsh_action_createdir local:///dpxmlshtest'
+  dpxmlsh_action_createdir local:///dpxmlshtest \
+    || { echo "dpxmlsh_action_createdir failed $?" >&2 ; return 1 ; }
+  echo "asdf" | dpxmlsh_set_file - local:///dpxmlshtest/asdf \
+    || { echo "dpxmlsh_action_createdir failed $?" >&2 ; return 1 ; }
+  dpxmlsh_ls | grep dpxmlshtest | grep -q asdf \
+    || { echo "looking for created file in created dir failed $?" >&2 ; return 1 ; }
+  echo '$ dpxmlsh_action_removedir local:///dpxmlshtest'
+  dpxmlsh_action_removedir local:///dpxmlshtest \
+    || { echo "dpxmlsh_action_removedir failed $?" >&2 ; return 1 ; }
+  dpxmlsh_ls | grep dpxmlshtest | grep asdf \
+    && { echo "looking for created file in created dir succeeded $?" >&2 ; return 1 ; }
     
   echo -e "\n#### WOOHOO dpxmlsh_selftest success"
 }
