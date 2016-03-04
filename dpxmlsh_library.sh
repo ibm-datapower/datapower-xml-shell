@@ -20,9 +20,12 @@
 #   and set_file do just what one would expect.  Tab completion helps.
 #
 
-DPXMLSH_VERSION=0.63
+DPXMLSH_VERSION=0.64
 
 # Changes
+# 0.64 2016-03-04:
+#  * Disable the password selftest, runs afowl the repeated pw check
+#  * Disable the testhardware selftest, not applicable on all platforms
 # 0.63 2016-01-04:
 #  * Add missing domain on set-file and get-file
 #  * Add createdir and removedir
@@ -1777,10 +1780,12 @@ function dpxmlsh_selftest ()
   dpxmlsh_action_saveconfig \
     || { echo "dpxmlsh_action_saveconfig failed $?" >&2 ; return 1 ; }
 
-  echo -e "\n#### dpxmlsh_action_changepassword, change the password then change it back again.  Note the two calls to _init!"
-  if [ "$_DPXMLSH_DPPASS" = "" ]; then
-    echo "WARNING: Cannot test password change unless dpxmlsh_init -p <password> was specified"
+  # Disable the password test, it needs to be reworked so it does not run afowl
+  # the repeated-password test
+  if true || [ "$_DPXMLSH_DPPASS" = "" ]; then
+    echo "WARNING: Cannot test password change"
   else
+    echo -e "\n#### dpxmlsh_action_changepassword, change the password then change it back again.  Note the two calls to _init!"
     OLDPASS="$_DPXMLSH_DPPASS"
     echo "\$ dpxmlsh_action_changepassword $_DPXMLSH_DPPASS dpxmlsh-$_DPXMLSH_DPPASS"
     dpxmlsh_action_changepassword "$_DPXMLSH_DPPASS" "dpxmlsh-$_DPXMLSH_DPPASS" \
@@ -1799,10 +1804,16 @@ function dpxmlsh_selftest ()
       || { echo "dpxmlsh_init with old password failed $?" >&2 ; return 1 ; }
   fi
 
-  echo -e "\n#### dpxmlsh_action_testhardware"
-  echo '$ dpxmlsh_action_testhardware'
-  dpxmlsh_action_testhardware \
-    || { echo "dpxmlsh_action_testhardware failed $?" >&2 ; return 1 ; }
+  if true
+  then
+    echo -e "\n#### dpxmlsh_action_testhardware skipped, not applicable on all platforms"
+  else
+    echo -e "\n#### dpxmlsh_action_testhardware"
+    echo '$ dpxmlsh_action_testhardware'
+    dpxmlsh_action_testhardware \
+      || { echo "dpxmlsh_action_testhardware failed $?" >&2 ; return 1 ; }
+  fi
+
   echo -e "\n#### dpxmlsh_action_createdir"
   echo '$ dpxmlsh_action_createdir local:///dpxmlshtest'
   dpxmlsh_action_createdir local:///dpxmlshtest \
